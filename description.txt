@@ -1,0 +1,2 @@
+Lets you craft using the items you have in your armor, accessory, and dye slots.
+Can be toggled with a button next to the equipment slots

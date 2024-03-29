@@ -1,0 +1,5 @@
+displayName = Craft From Equipment
+author = Tyfyter
+version = 1.0
+Side = Client
+homepage = https://tyfyter.github.io/?CraftFromEquipment
