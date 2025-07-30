@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using MonoMod.Cil;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,6 +12,7 @@ using Terraria.GameContent;
 using Terraria.GameInput;
 using Terraria.ID;
 using Terraria.Localization;
+using Terraria.Map;
 using Terraria.ModLoader;
 using Terraria.ModLoader.Default;
 using Terraria.ModLoader.IO;
@@ -27,6 +29,14 @@ namespace CraftFromEquipment
 			exAccessorySlot = new("exAccessorySlot", BindingFlags.NonPublic);
 			exDyesAccessory = new("exDyesAccessory", BindingFlags.NonPublic);
 			On_Main.DrawLoadoutButtons += On_Main_DrawLoadoutButtons;
+			On_Main.DrawInventory += On_Main_DrawInventory;
+			try {
+				IL_Main.DrawInventory += IL_Main_DrawInventory;
+			} catch {
+#if DEBUG
+				throw;
+#endif
+			}
 			enabledText = Language.GetOrRegister($"Mods.{Name}.Toggle.Enabled");
 			disabledText = Language.GetOrRegister($"Mods.{Name}.Toggle.Disabled");
 		}
@@ -36,11 +46,15 @@ namespace CraftFromEquipment
 			enabledText = null;
 			disabledText = null;
 		}
-
+		Rectangle buttonPosition;
 		private void On_Main_DrawLoadoutButtons(On_Main.orig_DrawLoadoutButtons orig, int inventoryTop, bool demonHeartSlotAvailable, bool masterModeSlotAvailable) {
 			orig(inventoryTop, demonHeartSlotAvailable, masterModeSlotAvailable);
 			int size = (int)(22 * Main.inventoryScale);
-			Rectangle buttonPosition = new(Main.screenWidth - 58 * 3 - 11 - size, inventoryTop - size, size, size);
+			buttonPosition = new(Main.screenWidth + (int)(58 * Main.inventoryScale) - 64 - 28 - size + 2, inventoryTop - size + 8, size, size);
+		}
+		private void On_Main_DrawInventory(On_Main.orig_DrawInventory orig, Main self) {
+			orig(self);
+			if (Main.EquipPage != 0) return;
 			ref bool enabled = ref CraftFromEquipsPlayer.localPlayer.enabled;
 			Texture2D texture = TextureAssets.HbLock[enabled ? 1 : 0].Value;
 			Main.spriteBatch.Draw(texture, buttonPosition, new Rectangle(0, 0, 22, 22), Color.White);
@@ -56,6 +70,20 @@ namespace CraftFromEquipment
 				}
 			}
 		}
+		void IL_Main_DrawInventory(ILContext il) {
+			ILCursor cur = new(il);
+			ILLabel skip = default;
+			cur.GotoNext(i => i.MatchCall<Main>("DrawLoadoutButtons"));
+			cur.GotoNext(MoveType.After,
+				i => i.MatchCall<PlayerInput>("get_IgnoreMouseInterface"),
+				i => i.MatchBrtrue(out skip),
+				i => i.MatchLdcI4(1),
+				i => i.MatchStsfld<Main>(nameof(Main.armorHide))
+			);
+			cur.Index -= 2;
+			cur.EmitDelegate(() => buttonPosition.Contains(Main.MouseScreen.ToPoint()));
+			cur.EmitBrtrue(skip);
+		}
 	}
 	public class CraftFromEquipsPlayer : ModPlayer {
 		public bool enabled = true;
@@ -70,7 +98,7 @@ namespace CraftFromEquipment
 			itemConsumedCallback = (item, _) => {
 				if (item.stack <= 0) item.TurnToAir(true);
 			};
-			if (!enabled) return Array.Empty<Item>();
+			if (!enabled) return [];
 			ModAccessorySlotPlayer moddedSlots = Player.GetModPlayer<ModAccessorySlotPlayer>();
 			return Player.armor.Concat(Player.dye).Concat(CraftFromEquipment.exAccessorySlot.GetValue(moddedSlots)).Concat(CraftFromEquipment.exDyesAccessory.GetValue(moddedSlots));
 		}
